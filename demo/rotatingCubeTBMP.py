@@ -7,6 +7,8 @@ Tags: large, artistic, math"""
 
 import math, time, sys, os, tbmp
 
+tbmp.SILENCE = True
+
 # Set up the constants:
 PAUSE_AMOUNT = 0.1  # Pause length of one-tenth of a second.
 WIDTH, HEIGHT = os.get_terminal_size()
@@ -167,7 +169,7 @@ xRotation = 0.0
 yRotation = 0.0
 zRotation = 0.0
 
-termbitmap = tbmp.TBMP(WIDTH, HEIGHT, silence=True)
+termbitmap = tbmp.TBMP(WIDTH, HEIGHT)
 
 try:
     while True:  # Main program loop.
