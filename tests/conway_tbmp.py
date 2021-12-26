@@ -38,7 +38,7 @@ while True:  # Main program loop.
     else:
         os.system('clear')  # macOS and Linux use the clear command.
 
-    cells = tbmp.TBMP(bitmap=nextCells)
+    cells = tbmp.TBMP(data=nextCells)
 
     # Print cells on the screen:
     print(cells)

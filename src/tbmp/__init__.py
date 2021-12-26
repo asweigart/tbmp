@@ -1,18 +1,33 @@
-"""tbmp
+"""tbmp - A data structure for terminal-based bitmaps.
 By Al Sweigart al@inventwithpython.com
 
-A Python module for displaying bitmaps in the terminal as strings of block characters."""
+A Python module for displaying bitmaps in the terminal as strings of block
+characters. Text characters are twice as tall as they are wide, so each
+text character can represent two pixels. This module uses the block
+characters 9600, 9604, 9608, and the space character to represent pixels.
 
+Since they are still text characters, the "pixels" can be copy/pasted just
+like any other text. This also makes it easy to display them in terminal
+windows or IDEs or web apps. The simplicity makes this module flexible
+for displaying graphics in a terminal window.
 
+This module is intended to be used to teach programming concepts such as
+nested for loops, simple 2D graphics, cellular automata such as Conway's
+Game of Life, and other concepts.
+
+This module has no dependencies and fits in a single .py file, so it can
+be installed through pip or just copied to a tbmp.py file for importing.
 """
-TODO - this can be used to teach nested for loops, simple graphics, conway's game of life and other
-cellular automata.
 
-"""
+
+# TODO - make this module thread safe?
 
 import array, sys, os, random, shutil
 
-PILLOW_INSTALLED = True
+"""The Pillow module isn't required nor automatically installed when
+tbmp is installed. But the png() function and importing bitmap image
+files to __init__() are features that depend on Pillow."""
+PILLOW_INSTALLED = True  # Set to True if Pillow is installed.
 try:
     from PIL import Image, ImageDraw, ImageColor
 except ImportError:
@@ -20,10 +35,12 @@ except ImportError:
 
 __version__ = '0.1.0'
 
+# Constants for the block characters used to represent pixels:
 TOP_BLOCK    = chr(9600)
 BOTTOM_BLOCK = chr(9604)
 FULL_BLOCK   = chr(9608)
 
+# Constants for line characters for the framed() method:
 UP_DOWN_CHAR    = chr(9474)
 LEFT_RIGHT_CHAR = chr(9472)
 DOWN_RIGHT_CHAR = chr(9484)
@@ -33,22 +50,21 @@ UP_LEFT_CHAR    = chr(9496)
 
 
 def size():
-    """
+    """Returns the size (as a (width, height) tuple) of terminal bitmap
+    appropriate given size of the terminal window.
 
-    Returns the size of the terminal window as (width, height).
-    Defaults to 79, 24.
+    Defaults to 79, 44.
 
     The width is reduced by 1 because on Windows, the Command
     Prompt automatically adds newlines when something is printed in the
     rightmost column.
 
-    The height is reduced by 2 because when the interactive shell
-    displays the >>> prompt again, the window scrolls down to hide the
-    top line of the printed bitmap (which also has a trailing newline)."""
-    w, h = shutil.get_terminal_size()
+    The height is reduced by 2 because to make space for an interactive
+    shell >>> prompt."""
+    w, h = shutil.get_terminal_size()  # Returns 80 x 24 by default.
     w -= 1
-    h *= 2 # TODO - comment on this
     h -= 2
+    h *= 2 # Text characters can each represent two pixels, so double the height.
     return w, h
 
 
@@ -58,9 +74,9 @@ class TBMPException(Exception):
     that isn't TBMPException or a subclass, it is likely a bug in tbmp."""
     pass
 
-# TODO - get rid of "bitmap" arg and make it in line with "width"
+
 class TBMP:
-    def __init__(self, width=None, height=None, bitmap=None, default=False, silence=False): # TODO - come up with better name than "silence"
+    def __init__(self, width=None, height=None, data=None, default=False, silence=False): # TODO - come up with better name than "silence"
         """Create a new terminal bitmap object. The default size is 80x24
         since that's historically the default size of terminals.
 
@@ -73,10 +89,12 @@ class TBMP:
                 twice the height of the terminal window minus 2 so that
                 it doesn't take up the full window (or 48). Defaults to
                 None.
-            bitmap (iterable, TBMP): If this is an iterable, it's the pixels to set to the opposite of
+            data (iterable, TBMP): If this is an iterable, it's the pixels to set to the opposite of
                 the `default` argument. Defaults to None, where all the pixels
                 are set to the `default` argument. If this is an iterable, the
                 values should be a tuple of (x, y) integer coordinates.
+                This can also be a string of block characters, such as the output of a different
+                TBMP object. Or it can be a string of an two-color image file to load data from.
             default (bool): The Boolean value all the pixels in the bitmap
                 start as. Defaults to False.
             silence (bool): If True, setting out of bounds pixels doesn't
@@ -85,20 +103,20 @@ class TBMP:
         """
 
         # TODO - should bitmap be able to be a multiline string of the block characters?
-        if bitmap is not None and isinstance(bitmap, TBMP):
-            # Copy the `bitmap` terminal bitmap to this terminal bitmap:
+        if data is not None and isinstance(data, TBMP):
+            # Copy the `data` terminal bitmap to this terminal bitmap:
             if width is not None or height is not None:
-                raise TBMPException('When passing a TBMP object for the bitmap parameter, width and height arguments must be left out.')
-            self._width = bitmap._width
-            self._height = bitmap._height
-            self._silence = bitmap._silence
-            self._bitmap = bitmap._bitmap[:]
+                raise TBMPException('When passing a TBMP object for the data parameter, width and height arguments must be left out.')
+            self._width = data._width
+            self._height = data._height
+            self._silence = data._silence
+            self._bitmap = data._bitmap[:]
             return
-        elif bitmap is not None and isinstance(bitmap, str):
-            # Create the bitmap from a multiline string of box characters in the bitmap parameter:
-            if len(bitmap) == 0:
-                raise TBMPException('If bitmap is a string, it cannot be a blank string.')
-            lines = bitmap.split('\n')
+        elif data is not None and isinstance(data, str):
+            # Create the bitmap from a multiline string of box characters in the data parameter:
+            if len(data) == 0:
+                raise TBMPException('If data is a string, it cannot be a blank string.')
+            lines = data.split('\n')
             self._width = max([len(line) for line in lines])
             self._height = len(lines) * 2  # Each line of text represents two rows in the bitmap.
         else:
@@ -131,8 +149,8 @@ class TBMP:
             # Start with the bitmap completely empty.
             self.clear()
 
-        if bitmap is not None:
-            if isinstance(bitmap, str):
+        if data is not None:
+            if isinstance(data, str):
                 for i, line in enumerate(lines):
                     for x, char in enumerate(line):
                         if char == ' ':
@@ -148,8 +166,8 @@ class TBMP:
                             self[x, i * 2] = True
                             self[x, i * 2 + 1] = True
             else:
-                # Prepopulate the bitmap for the pixels specified in the `bitmap` iterable:
-                for x, y in bitmap:
+                # Prepopulate the bitmap for the pixels specified in the `data` iterable:
+                for x, y in data:
                     self[x, y] = not default
 
 
@@ -396,153 +414,83 @@ class TBMP:
 
 
     def copy(self, left=0, top=0, width=None, height=None):
+        """TODO"""
+
+        # Parameter validaton:
+        if not isinstance(left, int):
+            raise TBMPException('left argument must be an int')
+        if not isinstance(top, int):
+            raise TBMPException('top argument must be an int')
+
+        # If the width or height are None, let them default to the size of this bitmap:
         if width is None:
             width = self._width
         if height is None:
             height = self._height
 
+        # More parameter validation.
+        if not isinstance(width, int) or not width > 0:
+            raise TBMPException('width argument must be None or a nonzero positive int')
+        if not isinstance(height, int) or not height > 0:
+            raise TBMPException('height argument must be None or a nonzero positive int')
+
+        # If silence mode isn't enabled to suppress errors, then
+        # left/top/width/height values that go beyond the borders of the
+        # bitmap should raise an exception.
+        if not self._silence:
+            if left >= self._width:
+                raise TBMPException('left argument is beyond the right edge of the bitmap; it must be less than the bitmap\'s width (or enable silence mode)')
+            if left < 0:
+                raise TBMPException('left argument is beyond the left edge of the bitmap; it must be greater than 0 (or enable silence mode)')
+            if top >= self._height:
+                raise TBMPException('top argument is beyond the bottom edge of the bitmap; it must be less than the bitmap\'s height (or enable silence mode)')
+            if top < 0:
+                raise TBMPException('left argument is beyond the left edge of the bitmap; it must be greater than 0 (or enable silence mode)')
+            if left + width > self._width:
+                raise TBMPException('The area to copy goes beyond the right edge of the bitmap; you must decrease the left or width argument (or enable silence mode)')
+            if top + height > self._height:
+                raise TBMPException('The area to copy goes beyond the bottom edge of the bitmap; you must decrease the right or height argument (or enable silence mode)')
+
         newCopy = TBMP(width, height)
-        for srcx in range(left, left + width):
-            for srcy in range(top, top + height):
+
+        for srcx in range(max(left, 0), min(left + width, self._width)):
+            for srcy in range(max(top, 0), min(top + height, self._height)):
                 newCopy[srcx - left, srcy - top] = self[srcx, srcy]
         return newCopy
 
 
-    def paste(self, termBitmapObj, left=0, top=0, width=None, height=None):
-        if width is None:
-            width = self._width
-        if height is None:
-            height = self._height
+    def paste(self, termBitmapObj, left=0, top=0):
 
-        # TODO
+        # Parameter validaton:
+        if not isinstance(left, int):
+            raise TBMPException('left argument must be an int')
+        if not isinstance(top, int):
+            raise TBMPException('top argument must be an int')
 
+        # If silence mode isn't enabled to suppress errors, then
+        # left/top/width/height values that go beyond the borders of the
+        # bitmap should raise an exception.
+        if not termBitmapObj._silence:
+            if left >= self._width:
+                raise TBMPException('left argument is beyond the right edge of the bitmap; it must be less than the bitmap\'s width (or enable silence mode)')
+            if left < 0:
+                raise TBMPException('left argument is beyond the left edge of the bitmap; it must be greater than 0 (or enable silence mode)')
+            if top >= self._height:
+                raise TBMPException('top argument is beyond the bottom edge of the bitmap; it must be less than the bitmap\'s height (or enable silence mode)')
+            if top < 0:
+                raise TBMPException('left argument is beyond the left edge of the bitmap; it must be greater than 0 (or enable silence mode)')
+            if left + self._width > termBitmapObj._width:
+                raise TBMPException('The area to copy goes beyond the right edge of the bitmap; you must decrease the left or width argument (or enable silence mode)')
+            if top + self._height > termBitmapObj._height:
+                raise TBMPException('The area to copy goes beyond the bottom edge of the bitmap; you must decrease the right or height argument (or enable silence mode)')
 
-
-    def rotateClockwise(self, angle=90):
-        """Rotate the bitmap clockwise by 90 degree increments."""
-        if not isinstance(angle, int) or angle % 90 != 0:
-            raise TBMPException('angle argument must be an int multiple of 90, not ' + str(angle))
-
-        if angle < 0:
-            rotateCounterclockwise(-angle)
-            return
-
-        angle = angle % 360
-        if angle == 0:
-            # If there is no rotation needed, just return.
-            return  # This is the base case for this recursive function.
-
-        if angle == 270:
-            rotateCounterclockwise(90)
-            return
-
-        # TODO - see which is faster: rotating by 90 degrees twice or flipping horizontally and vertically.
-
-
-        rotateClockwise(angle - 90)  # This is the recursive case for this recursive function.
-
-    def rotateClockwise2(self, angle=90):
-        """Rotate the bitmap clockwise by 90 degree increments."""
-        if not isinstance(angle, int) or angle % 90 != 0:
-            raise TBMPException('angle argument must be an int multiple of 90, not ' + str(angle))
-
-        if angle < 0:
-            rotateCounterclockwise(-angle)
-            return
-
-        angle = angle % 360
-        if angle == 0:
-            # If there is no rotation needed, just return.
-            return  # This is the base case for this recursive function.
-
-        if angle == 270:
-            rotateCounterclockwise(90)
-            return
-
-        # TODO - see which is faster: rotating by 90 degrees twice or flipping horizontally and vertically.
-
-
-        rotateClockwise(angle - 90)  # This is the recursive case for this recursive function.
-
-    """
-1...2
-.....
-.....
-.....
-4...3
-
-.1...
-....2
-.....
-4....
-...3.
-
-..1..
-.....
-4...2
-.....
-..3..
-
-...2.
-1....
-.....
-....3
-.4...
-
-.....
-.1.2.
-.....
-.4.3.
-.....
-
-.....
-..1..
-.4.2.
-..3..
-.....
-
-###..
-###..
-.....
-.....
-.....
-
-
-12345  kfa61
-67890  lgb72
-abcde  mhc83
-fghij  nid94
-klmno  oje05
-
-12345  a61
-67890  b72
-abcde  c83
-       d94
-       e05"""
-
-
-    def rotateCounterclockwise(self, angle=90):
-        """Rotate the bitmap clockwise by 90 degree increments."""
-        if not isinstance(angle, int) or angle % 90 != 0:
-            raise TBMPException('angle argument must be an int multiple of 90, not ' + str(angle))
-
-        if angle < 0:
-            rotateClockwise(-angle)
-            return
-
-        angle = angle % 360
-        if angle == 0:
-            # If there is no rotation needed, just return.
-            return  # This is the base case for this recursive function.
-
-        if angle == 270:
-            rotateClockwise(90)
-            return
-        # TODO - see which is faster: rotating by 90 degrees twice or flipping horizontally and vertically.
-
-
-        rotateCounterclockwise(angle - 90)  # This is the recursive case for this recursive function.
-        # TODO
+        for x in range(self._width):
+            if x + left < 0 or x + left > termBitmapObj._width:
+                continue  # The x position is out of bounds, so skip it.
+            for y in range(self._height):
+                if y + top < 0 or y + top > termBitmapObj._height:
+                    continue  # The y position is out of bounds, so skip it.
+                termBitmapObj[x + left, y + top] = self[x, y]
 
 
     @property
@@ -553,6 +501,21 @@ abcde  c83
     @property
     def height(self):
         return self._height
+
+
+    @property
+    def size(self):
+        return (self._width, self._height)
+
+
+    @property
+    def silence(self):
+        return self._silence
+
+
+    @silence.setter
+    def silence(self, value):
+        self._silence = bool(value)
 
 
     def __getitem__(self, key):
@@ -693,7 +656,7 @@ class TBMP_iterator:
 
 
 
-b = TBMP(bitmap="""          ▄▄█▀▀▄▄▄
+b = TBMP(data="""          ▄▄█▀▀▄▄▄
        ▄▀▀   █▄▀▀ █
    ▄▄▀▀    ▄▀▀█    █
   ▀█▀▀▄▄▄▀▀    █    ▀▄
