@@ -25,7 +25,7 @@ be installed through pip or just copied to a tbmp.py file for importing.
 import array, sys, os, random, shutil
 
 """The Pillow module isn't required nor automatically installed when
-tbmp is installed. But the png() function and importing bitmap image
+tbmp is installed. But the image() function and importing bitmap image
 files to __init__() are features that depend on Pillow."""
 PILLOW_INSTALLED = True  # Set to True if Pillow is installed.
 try:
@@ -33,7 +33,7 @@ try:
 except ImportError:
     PILLOW_INSTALLED = False
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 # Constants for the block characters used to represent pixels:
 TOP_BLOCK    = chr(9600)
@@ -68,6 +68,21 @@ def size():
     return w, h
 
 
+
+def cube():
+    """Returns a new TBMP object containing a drawing of a cube. This is
+    useful for test bitmaps."""
+
+    return TBMP(width=24, height=24, data=int('0x1fffc03000c050014190064208082408102fffe02808202808202808202408102408101404101404101404101407fff4081024100842600982800a03000c03fff80000000', 16))
+
+
+def monaLisa():
+    """Returns a new TBMP object containing a drawing of the Mona Lisa. This
+    is useful for test bitmaps."""
+
+    return TBMP(width=68, height=100, data=int('0x1000000000000000000000000800000004001001000000000000000000000000100000000000000000000000100000000000000000000000000000002000000200000000000000000000000112080000000000000001200000000000200008000000080001084e40100000010208c025000044000000422e81008000081103182500200000000a18a300000000000010d29400020400154aa2d40000000204010752200000000000003da904000000000000af5400000800000005ad820000040000002b6e021000004004005f09102001010000005008010000000000000810000000000000022800420000000422000420000000200000000100002100000000400202000008200000080004000000000800010000000000104081000000800200000080000000020480082048800000000080101000000000000000a820000808240008654080220000000203200201000000400009120802900822000000000000001000042400400000248820091020020000020102891200088215120808080a800005fe88002a080000017ff6001c4240000216eff800520680000af76ac0c01082004f17fff0028447420200dedb81040033882096ffc042a221440102f6fa0105100922001bfac00220444d8000edf8400881222c029775808204020a0801bbe00012208484000a680040088094000252842085024494401528012508022412201100120000000000084800912405401000000094400801484000040000900480400001602840080020a0006b00201002081000125800142212501020a64110000000088154380802109288000071501094004200001d6c00500252ae800066c0009204aa0a803f7654000aab60000aa9e00a2a055b5500376a13088854d0000526a2d4444af749000220151120536908048523eca842db46002ffe1b6ab3d5b71402bba5b6d186e99a402ddc2b6ed6d5f698006ea6db3bd756aee013fcb55d525d369400b74bb6d5bc6dad7001b9adaac93aab2c80462d3575ad555d2801015aa96d55544d4008d6aad2556ab66a800a9552b4695491540552a96aa55aa54ab5aad5695b44a59b254a8a5290476544895526528cb38891a6a12a91571446554915488ac00a55249454926403325245242844a95288911255552aaa28d556ad5', 16))
+
+
 class TBMPException(Exception):
     """Exceptions raised by the tbmp module raise TBMPException or a
     subclass of TBMPException. If the tbmp module ever raises an exception
@@ -77,8 +92,11 @@ class TBMPException(Exception):
 
 class TBMP:
     def __init__(self, width=None, height=None, data=None, default=False, silence=False): # TODO - come up with better name than "silence"
-        """Create a new terminal bitmap object. The default size is 80x24
-        since that's historically the default size of terminals.
+        """Create a new terminal bitmap object. If the width and height
+        aren't specified, the size is set to slightly smaller than the
+        terminal window by default. The data parameter can prepopulate
+        the bitmap's pixels. Terminal bitmap objects are static in size
+        and cannot be resized.
 
         Args:
             width (int): The width of the bitmap in pixels. If None, it is
@@ -86,25 +104,42 @@ class TBMP:
                 minus one is to account for automatic newlines that Windows'
                 Command Prompt adds. Defaults to None.
             height (int): The height of the bitmap in pixels. If None, it is
-                twice the height of the terminal window minus 2 so that
-                it doesn't take up the full window (or 48). Defaults to
+                twice the height of the terminal window minus 2 times 2 so
+                that it doesn't take up the full window (or 44). Defaults to
                 None.
-            data (iterable, TBMP): If this is an iterable, it's the pixels to set to the opposite of
-                the `default` argument. Defaults to None, where all the pixels
-                are set to the `default` argument. If this is an iterable, the
-                values should be a tuple of (x, y) integer coordinates.
-                This can also be a string of block characters, such as the output of a different
-                TBMP object. Or it can be a string of an two-color image file to load data from.
+            data (iterable, TBMP): This is data to prepopulate the bitmap's
+                pixels. It can take several forms:
+
+                    None - All of the pixels are set to the `default` bool
+                    argument.
+
+                    str - Either a multiline string of the block characters
+                    that terminal bitmap objects render as. (Raises an
+                    exception if the string contains non-block characters.)
+                    Or it can be the string of a two-color image file to
+                    load data from (requires Pillow to be installed).
+
+                    TBMP - Copies the bitmap from another TBMP object.
+
+                    int - Loads the pixels from an int representation of the
+                    bitmap. (Pass a TBMP object to int() to get this.)
+
+                    iterable - An iterable of (x, y) integer coordinates of
+                    the pixels to set to the `default` argument.
+
             default (bool): The Boolean value all the pixels in the bitmap
                 start as. Defaults to False.
             silence (bool): If True, setting out of bounds pixels doesn't
                 raise an exception; it simply does nothing. If False, it
-                raises a TBMPException.
+                raises a TBMPException. Defaults to False.
         """
 
-        # TODO - should bitmap be able to be a multiline string of the block characters?
+        # If data is an int, the width and height arguments are required:
+        if data is not None and isinstance(data, int) and (width is None or height is None):
+            raise TBMPException('If the data argument is an int, then width and height arguments are required.')
+
+        # Create the bitmap by copying another TBMP object:
         if data is not None and isinstance(data, TBMP):
-            # Copy the `data` terminal bitmap to this terminal bitmap:
             if width is not None or height is not None:
                 raise TBMPException('When passing a TBMP object for the data parameter, width and height arguments must be left out.')
             self._width = data._width
@@ -112,35 +147,66 @@ class TBMP:
             self._silence = data._silence
             self._bitmap = data._bitmap[:]
             return
-        elif data is not None and isinstance(data, str):
+
+
+        if data is not None and isinstance(data, str):
+            # Create the bitmap from a black and white image file:
+            if os.path.exists(data):
+                if not PILLOW_INSTALLED:
+                    raise TBMPException('Pillow is required to be installed to create TBMP objects from an image file.')
+                img = Image.open(data)
+                self._width, self._height = img.size
+                self._silence = silence
+
+                # Create the backend data structure:
+                if default:
+                    # Start with the bitmap completely full.
+                    self.fill()
+                else:
+                    # Start with the bitmap completely empty.
+                    self.clear()
+
+                # Read in the pixel data from the image:
+                for x in range(self._width):
+                    for y in range(self._height):
+                        imgPixel = img.getpixel((x, y))
+
+                        if imgPixel[0:3] == (0, 0, 0):
+                            self[x, y] = default
+                        elif imgPixel[0:3] == (255, 255, 255):
+                            self[x, y] = not default
+                        else:
+                            raise TBMPException('Only black and white images can be used to load bitmap data from. The ' + data + ' image file contains a pixel with color ' + str(imgPixel))
+                return
+
             # Create the bitmap from a multiline string of box characters in the data parameter:
             if len(data) == 0:
                 raise TBMPException('If data is a string, it cannot be a blank string.')
             lines = data.split('\n')
             self._width = max([len(line) for line in lines])
             self._height = len(lines) * 2  # Each line of text represents two rows in the bitmap.
-        else:
-            # Create a blank bitmap based on the width and height parameters:
+            self._silence = silence
+            return
+
+        # The `data` argument was not specified. Create a blank bitmap
+        # based on the width and height parameters:
+        if width is None or height is None:
+            # Set the width and/or height based on the terminal size:
             self._width, self._height = shutil.get_terminal_size()
             self._width -= 1  # Account for Windows' Command Prompt adding a newline when something is printed in the rightmost column.
             self._height -= 2  # By reducing the height by 2, the prompt in the interactive shell on the bottom line won't hide the top line when this bitmap is printed.
             self._height *= 2  # Note that terminals display two terminal bitmap "pixels" per text character.
+        if width is not None:
+            self._width = width
+        if height is not None:
+            self._height = height
 
-            if width is not None:
-                if not isinstance(width, int) or width < 1:
-                    raise TBMPException('width arg must be an int greater than 0')
-                self._width = width
-            if height is not None:
-                if not isinstance(height, int) or height < 1:
-                    raise TBMPException('height arg must be an int greater than 0')
-                self._height = height
+        if not isinstance(self._width, int) or self._width < 1:
+            raise TBMPException('width arg must be an int greater than 0')
+        if not isinstance(self._height, int) or self._height < 1:
+            raise TBMPException('height arg must be an int greater than 0')
 
-        if self._width == 0:
-            raise TBMPException('width argument cannot be 0')
-        if self._height == 0:
-            raise TBMPException('height argument cannot be 0')
-
-        self._silence = silence
+        self._silence = silence  # If True, out-of-bounds errors are silenced.
 
         if default:
             # Start with the bitmap completely full.
@@ -150,6 +216,7 @@ class TBMP:
             self.clear()
 
         if data is not None:
+            # Create the bitmap
             if isinstance(data, str):
                 for i, line in enumerate(lines):
                     for x, char in enumerate(line):
@@ -165,6 +232,17 @@ class TBMP:
                         elif char == FULL_BLOCK:
                             self[x, i * 2] = True
                             self[x, i * 2 + 1] = True
+            elif isinstance(data, int):
+                data = bin(data)[2:].rjust(self._width * self._height, '0')  # Trim the '0b' at the start.
+                i = 0
+                for y in range(self._height):
+                    for x in range(self._width):
+                        self[x, y] = data[len(data) - 1 - i] == '1'
+                        i += 1
+
+                        # TODO add silence check there?
+                        if i > len(data):
+                            return
             else:
                 # Prepopulate the bitmap for the pixels specified in the `data` iterable:
                 for x, y in data:
@@ -177,13 +255,25 @@ class TBMP:
         an int or bool. If the return value is True, the pixel at those
         x and y coordinates is set, and if False the pixel is cleared.
 
+        Some examples are:
+            tbmpObj.applyFunc('(x ^ y) % 5')
+            tbmpObj.applyFunc('(x & y) & (x ^ y) % 19')
+            tbmpObj.applyFunc('(x % y) % 4')
+            tbmpObj.applyFunc('(x & y)')
+
+        If the function raises an Exception (for zero divides, for example)
+        the pixel at that xy coordinate is simply set to False.
+
         Args:
-           funcStr (str, callable): TODO
+            funcStr (str, callable): Either a string of the lambda function
+                code (which may or may not begin with "lambda x, y:") or
+                a callable function that takes two int arguments for the
+                x and y coordinates.
         """
         if isinstance(funcStr, str):
             # A vague attempt at mitigating malicious input since func is passed to eval(). Don't rely on this for security.
             if ';' in funcStr or 'import' in funcStr or 'open' in funcStr:
-                raise Exception('funcStr argument as a string must only have a lambda funciton')
+                raise Exception('funcStr argument as a string must only have a lambda function')
 
             if not funcStr.strip().replace(' ', '').lower().startswith('lambdax,y:'):
                 funcStr = 'lambda x, y:' + funcStr
@@ -198,9 +288,30 @@ class TBMP:
 
 
 
-    def png(self, fg='white', bg='black', fgAlpha=255, bgAlpha=255):
+    def image(self, fg='white', bg='black', fgAlpha=255, bgAlpha=255):
+        """Returns a Pillow Image object of the bitmap. Requires the Pillow
+        module to be installed.
+
+        Args:
+            fg (str) - The color of the set pixels in the foreground.
+                Can either be a web safe color name or an RGB or RGBA tuple
+                of ints from 0 to 255. For example (255, 0, 0) is the tuple
+                for red. The alpha channel in this tuple is ignored; use
+                fgAlpha instead. Defaults to 'white'.
+            bg (str) - The color of the clear pixels in the background.
+                Can either be a web safe color name or an RGB or RGBA tuple
+                of ints from 0 to 255. For example (255, 0, 0) is the tuple
+                for red. The alpha channel in this tuple is ignored; use
+                bgAlpha instead. Defaults to 'black'.
+            fgAlpha (int) - The opacity of the foreground color, which ranges
+                from 0 (completely transparent) to 255 (completely opaque.)
+                Defaults to 255.
+            bgAlpha (int) - The opacity of the background color, which ranges
+                from 0 (completely transparent) to 255 (completely opaque.)
+                Defaults to 255.
+        """
         if not PILLOW_INSTALLED:
-            raise Exception('The png() function requires the Pillow module to be installed.')
+            raise Exception('The image() function requires the Pillow module to be installed.')
 
         fg = ImageColor.getcolor(fg, 'RGB')
         if fgAlpha < 255:
@@ -212,13 +323,17 @@ class TBMP:
             # Set the transparency of the foreground color:
             bg = (bg[0], bg[1], bg[2], bgAlpha)
 
+        # Set the color mode to include the alpha channel if there's any transparency:
         if fgAlpha < 255 or bgAlpha < 255:
             colorMode = 'RGBA'
         else:
             colorMode = 'RGB'
-        im = Image.new(colorMode, (self._width, self._height), bg)
 
-        draw = ImageDraw.Draw(im)
+        # Create the blank image object:
+        img = Image.new(colorMode, (self._width, self._height), bg)
+
+        # Copy the pixels of the terminal bitmap to this image object:
+        draw = ImageDraw.Draw(img)
         pixels = []
         for x in range(self._width):
             for y in range(self._height):
@@ -231,24 +346,26 @@ class TBMP:
                         draw.point(pixels, fill=fg)
                         pixels.clear()
         draw.point(pixels, fill=fg)
-        return im
 
+        return img
 
+    def _getNumBytesNeeded
+        numBytesNeeded = (self._width * self._height) // 8
+            if (self._width * self._height) % 8 > 0:
+                numBytesNeeded += 1
+        return numBytesNeeded
 
     def clear(self):
-        # Make the bitmap completely empty.
-        numBytesNeeded = (self._width * self._height) // 8
-        if (self._width * self._height) % 8 > 0:
-            numBytesNeeded += 1
+        """Make the bitmap completely empty."""
+
+        numBytesNeeded = self._getNumBytesNeeded()
         # It's faster to replace the array. in _bitmap than set all the values to 0:
         self._bitmap = array.array('B', b'\x00' * numBytesNeeded)
 
 
     def fill(self):
-        # Make the bitmap completely full.
-        numBytesNeeded = (self._width * self._height) // 8
-        if (self._width * self._height) % 8 > 0:
-            numBytesNeeded += 1
+        """Make the bitmap completely full."""
+        numBytesNeeded = self._getNumBytesNeeded()
         # It's faster to replace the array. in _bitmap than set all the values to 255:
         self._bitmap = array.array('B', b'\xFF' * numBytesNeeded)
 
@@ -261,9 +378,7 @@ class TBMP:
 
         Note that due to how the code is written, using a weight of 0.5
         is currently about 20x faster than a non-0.5 weight."""
-        numBytesNeeded = (self._width * self._height) // 8
-        if (self._width * self._height) % 8 > 0:
-            numBytesNeeded += 1
+        numBytesNeeded = self._getNumBytesNeeded()
 
         if weight == 0.50:
             self._bitmap = array.array('B', random.randbytes(numBytesNeeded))
@@ -589,6 +704,23 @@ class TBMP:
         return ''.join(result)
 
 
+    def __int__(self):
+        bitmapAsInt = 0
+        num = 1
+        for bit in self:
+            if bit:
+                bitmapAsInt += num
+            num += num  # Double the number.
+        return bitmapAsInt
+
+
+
+    def hex(self):
+        return hex(int(self))
+
+    def bin(self):
+        return bin(int(self))
+
     @property
     def framed(self):
         result = []
@@ -653,18 +785,6 @@ class TBMP_iterator:
 
         return bitToReturn
 
-
-
-
-b = TBMP(data="""          ▄▄█▀▀▄▄▄
-       ▄▀▀   █▄▀▀ █
-   ▄▄▀▀    ▄▀▀█    █
-  ▀█▀▀▄▄▄▀▀    █    ▀▄
-   ▀▄   ▀▄      █    ▀▄
-    ▀▄   ▀▄    ▄▄▀▀▀▀▄█▄
-      █   ▀▄▄▄▀    ▄▄▀▀
-       █ ▄▄▀▄   ▄▄▀
-        ▀▀▀▀█▄▀▀""")
 
 class InfTBMP:
     # a limitless tbmp that lets you also have negative coordinates.
